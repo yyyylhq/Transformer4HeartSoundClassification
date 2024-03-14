@@ -15,7 +15,7 @@ def butter_bandpass(lowcut=25.0, highcut=400.0, fs=2000, order=5):
     b, a = butter(order, [low, high], btype='band')
     return b, a
 
-def butter_bandpass_filter(data, lowcut=25.0, highcut=400.0, fs=2000, order=5) -> np.ndarray:
+def butter_bandpass_filter(data, lowcut=25.0, highcut=400.0, fs=2000, order=5):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     y = lfilter(b, a, data)
     return y
