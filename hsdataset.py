@@ -3,8 +3,9 @@ import csv
 import time
 import torch
 import librosa
+import tensorflow as tf
 import numpy as np
-from torch.utils import data
+#from torch.utils import data
 from scipy.signal import butter, lfilter
 from torchlibrosa import Spectrogram, LogmelFilterBank
 
@@ -20,7 +21,7 @@ def butter_bandpass_filter(data, lowcut=25.0, highcut=400.0, fs=2000, order=5):
     y = lfilter(b, a, data)
     return y
 
-class HeartSoundDataset(data.Dataset):
+class HeartSoundDataset():
 
     def __init__(self, data_dir, label_file, sample_rate=32000, butter_sample_rate=2000, frame_len=1, tokens=100, stride=1):
         super(HeartSoundDataset, self).__init__()
@@ -40,7 +41,10 @@ class HeartSoundDataset(data.Dataset):
         self.spec = Spectrogram(n_fft=1024, hop_length=320, win_length=1024, window="hann", center=True, pad_mode="reflect", freeze_parameters=True)
         self.logmel = LogmelFilterBank(sr=self.sample_rate, n_fft=1024, n_mels=64, fmin=50.0, fmax=14000.0, ref=1.0, amin=1e-10, top_db=None, freeze_parameters=True)
 
-        self.data = list()
+        self.data = {
+            "data": [],
+            "label": []
+        }
 
         with open(label_file, "r", encoding="utf-8") as f:
             csv_reader = csv.reader(f, delimiter=",")
@@ -70,7 +74,7 @@ class HeartSoundDataset(data.Dataset):
                 #file_label = torch.Tensor([1.0, 0.0]) if int(row[1]) == -1 else torch.Tensor([0.0, 1.0])
                 #file_label_sure = torch.Tensor([1.0]) if int(row[2]) == 1 else torch.Tensor([0.0])
 
-                file_label = np.zeros(1, dtype=np.int32) if int(row[1]) == -1 else np.ones(1, dtype=np.int32)
+                file_label = 0 if int(row[1]) == -1 else 1
                 #file_label_sure = torch.Tensor([1.0]) if int(row[2]) == 1 else torch.Tensor([0.0])
 
                 for i in range(int(data1.shape[0] / self.sample_rate)):
@@ -79,16 +83,13 @@ class HeartSoundDataset(data.Dataset):
                     t3 = data4[i * 6400 : i * 6400 + 6400].reshape(self.tokens, -1)
 
                     #self.data.append([torch.cat((t1, t2, t3), dim=1), file_label, file_label_sure])
-                    self.data.append([np.concatenate((t1, t2, t3), axis=1), file_label])
+                    self.data["data"].append(np.concatenate((t1, t2, t3), axis=1, dtype=np.float32))
+                    self.data["label"].append(file_label)
 
 
-    def __getitem__(self, index):
-        return self.data[index]
-
-    def __len__(self):
-        return len(self.data)
-
-
+    def get_dataset(self):
+        return tf.data.Dataset.from_tensor_slices(self.data)
+"""
 class HeartSoundDatasetVote(data.Dataset):
 
     def __init__(self, data_dir, label_file, sample_rate=32000, butter_sample_rate=2000, tokens=100, frame_len=1, stride=1):
@@ -148,17 +149,22 @@ class HeartSoundDatasetVote(data.Dataset):
     def __len__(self):
         return len(self.data)
 
+"""
+
 if __name__ == "__main__":
     start = time.time()
-    #train = HeartSoundDataset("../datasets/HS-PCCC2016/data", "../datasets/HS-PCCC2016/train/train.csv")
+    train_ds = HeartSoundDataset("./datasets/HS-PCCC2016/data", "./datasets/HS-PCCC2016/train/train.csv").get_dataset()
+    for step, batch in enumerate(train_ds.as_numpy_iterator()):
+        print(step)
+    print(f"Time: {start - time.time()}s")
     #test = HeartSoundDataset("../datasets/HS-PCCC2016/data", "../datasets/HS-PCCC2016/test/test.csv")
-    testvote = HeartSoundDatasetVote("../datasets/HS-PCCC2016/data", "../datasets/HS-PCCC2016/test/test.csv")
-    d = testvote[0]
-    print(*d)
-    print(d["file_name"])
-    print(d["data"].shape)
-    print(d["label"])
-    print(time.time()- start)
+    #testvote = HeartSoundDatasetVote("../datasets/HS-PCCC2016/data", "../datasets/HS-PCCC2016/test/test.csv")
+    #d = testvote[0]
+    #print()
+    #print(d["file_name"])
+    #print(d["data"].shape)
+    #print(d["label"])
+    #print(time.time()- start)
 
     """
     all = len(train)

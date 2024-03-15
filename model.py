@@ -66,4 +66,4 @@ if __name__ == "__main__":
 
     x = jnp.ones((8, 10, 404))
     out = m.apply(params, x, train=True, rngs={'dropout': jax.random.key(0)})
-    #print(m.tabulate({'params': jax.random.key(0), 'dropout': jax.random.key(1)}, jnp.ones((1, 100, 404)), compute_flops=True, compute_vjp_flops=False))
+    print(m.tabulate({'params': jax.random.key(0), 'dropout': jax.random.key(1)}, jnp.ones((1, 100, 404)), compute_flops=True, compute_vjp_flops=False))
