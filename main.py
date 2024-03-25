@@ -57,7 +57,6 @@ if __name__ == "__main__":
     #parser_test.add_argument('--model_type', type=str, required=True)
     #parser_test.add_argument('--model', type=str, required=True)
     #parser_test.add_argument('--model_type', type=str, default="Wavegram_Logmel_CNN14_Attention")
-    #parser_test.add_argument('--model', type=str, default="./best.pth")
 
     #parser_test.add_argument('--test_dataset', type=str, default="./rawdata/labels/pre/all_val.csv")
 
