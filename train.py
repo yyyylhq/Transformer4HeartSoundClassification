@@ -64,10 +64,10 @@ def compute_metrics(state, batch):
 
 def train(args):
 
-    test_ds = hsdataset.HeartSoundDataset("./datasets/HS-PCCC2016/data", "./datasets/HS-PCCC2016/test/test.csv")
+    #test_ds = hsdataset.HeartSoundDataset("./datasets/HS-PCCC2016/data", "./datasets/HS-PCCC2016/test/test.csv")
 
 
-    m = model.TransformerEncoder()
+    m = model.TransformerEncoderwithSinPE()
 
     rng_params = jax.random.key(args.params_rng)
     rng_dropout = jax.random.key(args.dropout_rng)
@@ -85,5 +85,6 @@ def train(args):
 
 
     for e in range(args.epochs):
-        Z
+        pass
+
 

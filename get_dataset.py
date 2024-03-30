@@ -3,7 +3,19 @@ import csv
 import time
 import librosa
 import numpy as np
-#import jax.numpy as jnp
+from scipy.signal import butter, lfilter
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='bandpass')
+    return b, a
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
 
 def get_dataset(
     csv_label_file,
@@ -22,7 +34,7 @@ def get_dataset(
     dim_frame = num_tokens * dim4token
 
     ds = {
-        "data": np.float32(np.ones((1, num_tokens, dim4token))),
+        "data": np.float32(np.ones((1, num_tokens, 2 * dim4token))),
         "label": np.int16(np.ones(1))
     }
     print(ds["data"].shape)
@@ -37,8 +49,9 @@ def get_dataset(
 
             file_path = os.path.join(data_dir, file_name)
             data, sr = librosa.load(file_path, sr=tokens4sec * dim4token)
-
             len_data = data.shape[0] / sr
+
+            filter_data = butter_bandpass_filter(data, 25.0, 400.0, 12800, order=5)
 
             #print(len_data)
             #print(int((len_data - frame_len) / stride + 1))
@@ -46,7 +59,10 @@ def get_dataset(
             if selection_type == "window":
                 for i in range(int((len_data - frame_len) / stride + 1)):
 
-                    t = data[int(i * stride * tokens4sec * dim4token) : int(i * stride * tokens4sec * dim4token + dim_frame)].reshape(1, num_tokens, -1)
+                    t1 = data[int(i * stride * tokens4sec * dim4token) : int(i * stride * tokens4sec * dim4token + dim_frame)].reshape(1, num_tokens, -1)
+                    t2 = filter_data[int(i * stride * tokens4sec * dim4token) : int(i * stride * tokens4sec * dim4token + dim_frame)].reshape(1, num_tokens, -1)
+
+                    t = np.concatenate((t1, t2), axis=2)
 
                     ds["data"] = np.concatenate((ds["data"], t), axis=0)
                     ds["label"] = np.concatenate((ds["label"], file_label), axis=0)
@@ -63,7 +79,7 @@ def get_dataset(
 if __name__ == "__main__":
     start = time.time()
 
-    get_dataset("../datasets/HS-PCCC2016/train/k0/train.csv", "../datasets/HS-PCCC2016/data", "wav", 100, 128, 1, 0.5)
+    get_dataset("../datasets/pediatricPCGdataset/ten_fold/all.csv", "../datasets/pediatricPCGdataset/data", "wav", 100, 128, 1, 0.5)
 
     print(f"Time: {time.time() - start}s.")
     print("Done!")
