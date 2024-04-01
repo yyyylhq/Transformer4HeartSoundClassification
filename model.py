@@ -124,8 +124,10 @@ class T4HSC(nn.Module):
     dim_feedfoward: int = 2048
     dropout_rate: float = 0.5
 
+    @nn.compact
     def __call__(self, x, training: bool):
-        x = TransformerEncoder(num_layer=self.num_layer, d_model=self.d_model, nhead=self.nhead, dim_feedfoward=self.dim_feedfoward, dropout_rate=self.dropout_rate)(x, training=training)
+
+        x = TransformerEncoder(num_layer=self.num_layer, d_model=self.d_model, nhead=self.nhead, dim_feedfoward=self.dim_feedfoward, dropout_rate=self.dropout_rate)(x, training)
 
         x = nn.Dropout(self.dropout_rate, deterministic=not training)(x)
         x = nn.Dense(self.hidden_dim)(x)
@@ -141,9 +143,9 @@ if __name__ == "__main__":
     m = T4HSC()
     #m = TransformerEncoder()
     x = jnp.ones((16, 10, 404))
-    params = m.init({"params": jax.random.key(0), "dropout": jax.random.key(1)}, x, training=False)
+    params = m.init({"params": jax.random.key(0), "dropout": jax.random.key(1)}, x, training=True)
 
-    y = m.apply(params, x, training=True, rngs={'dropout': jax.random.key(0)})
+    y = m.apply(params, x, training=False, rngs={'dropout': jax.random.key(0)})
     print(y.shape)
-    print(m.tabulate({'params': jax.random.key(0), 'dropout': jax.random.key(1)}, jnp.ones((1, 100, 404)), compute_flops=True, compute_vjp_flops=False))
+    print(m.tabulate({'params': jax.random.key(0), 'dropout': jax.random.key(1)}, jnp.ones((1, 100, 404)), False, compute_flops=True, compute_vjp_flops=False))
 
