@@ -48,7 +48,7 @@ if __name__ == "__main__":
     #test_vote_dataset = HeartSoundDatasetVote("../datasets/pediatricPCGdataset/data/wav", f"../datasets/pediatricPCGdataset/ten_fold/{tf}/test/test.csv")
 
 
-    train_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/train/{tf}/train.csv")
+    #train_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/train/{tf}/train.csv")
     test_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{tf}/test.csv")
     test_vote_dataset = HeartSoundDatasetVote("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{tf}/test.csv")
 
