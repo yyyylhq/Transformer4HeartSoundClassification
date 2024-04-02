@@ -1,12 +1,13 @@
 import jax
 import optax
 import model
+import numpy as np
 from clu import metrics
 from flax.training import train_state
 from flax import struct
 from jax import numpy as jnp
-from hsdataset import HeartSoundDataset, HeartSoundDatasetVote
-from torch.utils.data import DataLoader
+#from hsdataset import HeartSoundDataset, HeartSoundDatasetVote
+#from torch.utils.data import DataLoader
 
 @struct.dataclass
 class HeartSoundClassificationMetrics(metrics.Collection):
@@ -30,12 +31,14 @@ def create_train_state(m, rng, learning_rate, momentum):
 
 @jax.jit
 def train_step(state, batch, dropout_rng):
+
     def loss_fn(params):
         logits = state.apply_fn({"params": params}, batch["data"], True, rngs=dropout_rng)
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits=logits,
             labels=batch["label"]
         ).mean()
+        print(loss)
 
         return loss
 
@@ -85,23 +88,33 @@ def train(args):
     }
 
 
-    #train_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/train/{args.tf}/train.csv")
+    """
+    train_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/train/{args.tf}/train.csv")
     test_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
-    #test_vote_dataset = HeartSoundDatasetVote("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
+    test_vote_dataset = HeartSoundDatasetVote("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
 
-    #train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
+    train_dataset = np.load(f"../datasets/PCCD/ten_folds/train/k{args.tf}/train_data.npy")
+    train_dataset_label = np.load(f"../datasets/PCCD/ten_folds/train/k{args.tf}/train_label.npy")
+    """
+    train_dataset = np.load(f"../datasets/PCCD/ten_folds/train/k0/train_data.npy")
+    train_dataset_label = np.load(f"../datasets/PCCD/ten_folds/train/k0/train_label.npy")
+
 
     for e in range(args.epochs):
         print(f"Epoch {e} start...")
 
-        for b, (X, y) in enumerate(test_dataloader):
-            print(b)
-            print(X.shape)
-            print(y.shape)
+        len = train_dataset.shape[0] // args.batch_size
+        print(len)
+        for i in range(len):
             batch = {}
-            batch["data"] = jnp.array(X)
-            batch["label"] = jnp.array(y, dtype=jnp.int32).reshape(-1)
+            batch["data"] = jnp.array(train_dataset[i * args.batch_size : i * args.batch_size + args.batch_size])
+            batch["label"] = jnp.array(train_dataset_label[i * args.batch_size : i * args.batch_size + args.batch_size].reshape(-1))
+            print(batch["data"].shape)
+            print(batch["label"].shape)
+            print(batch["data"].dtype)
+            print(batch["label"].dtype)
 
             rng_dropout, _ = jax.random.split(rng_dropout)
             train_state = train_step(train_state, batch, {"dropout": rng_dropout})
