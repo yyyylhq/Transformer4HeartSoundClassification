@@ -1,11 +1,12 @@
 import jax
 import optax
 import model
-import hsdataset
 from clu import metrics
 from flax.training import train_state
 from flax import struct
 from jax import numpy as jnp
+from hsdataset import HeartSoundDataset, HeartSoundDatasetVote
+from torch.utils.data import DataLoader
 
 @struct.dataclass
 class HeartSoundClassificationMetrics(metrics.Collection):
@@ -16,11 +17,11 @@ class HeartSoundClassificationTrainState(train_state.TrainState):
     metrics: HeartSoundClassificationMetrics
 
 def create_train_state(m, rng, learning_rate, momentum):
-    params = m.init(rng, jnp.empty([1, 100, 404]))["params"]
+    params = m.init(rng, jnp.empty([1, 100, 404]), True)["params"]
 
     tx = optax.sgd(learning_rate, momentum)
 
-    return train_state.TrainState.create(
+    return HeartSoundClassificationTrainState.create(
         apply_fn=m.apply,
         params=params,
         tx=tx,
@@ -28,9 +29,9 @@ def create_train_state(m, rng, learning_rate, momentum):
     )
 
 @jax.jit
-def train_step(state, batch):
+def train_step(state, batch, dropout_rng):
     def loss_fn(params):
-        logits = state.apply_fn({"params": params}, batch["data"])
+        logits = state.apply_fn({"params": params}, batch["data"], True, rngs=dropout_rng)
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits=logits,
             labels=batch["label"]
@@ -46,7 +47,7 @@ def train_step(state, batch):
 
 @jax.jit
 def compute_metrics(state, batch):
-    logits = state.apply_fn({"params": state.params}, batch["data"])
+    logits = state.apply_fn({"params": state.params}, batch["data"], False)
     loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits,
         labels=batch["label"]
@@ -67,10 +68,11 @@ def train(args):
     #test_ds = hsdataset.HeartSoundDataset("./datasets/HS-PCCC2016/data", "./datasets/HS-PCCC2016/test/test.csv")
 
 
-    m = model.TransformerEncoderwithSinPE()
+    m = model.T4HSC()
 
     rng_params = jax.random.key(args.params_rng)
     rng_dropout = jax.random.key(args.dropout_rng)
+
     rng = {"params": rng_params, "dropout": rng_dropout}
 
     train_state = create_train_state(m=m, rng=rng, learning_rate=args.learning_rate, momentum=args.momentum)
@@ -83,8 +85,37 @@ def train(args):
     }
 
 
+    #train_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/train/{args.tf}/train.csv")
+    test_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
+    #test_vote_dataset = HeartSoundDatasetVote("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
+
+    #train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
 
     for e in range(args.epochs):
-        pass
+        print(f"Epoch {e} start...")
+
+        for b, (X, y) in enumerate(test_dataloader):
+            print(b)
+            print(X.shape)
+            print(y.shape)
+            batch = {}
+            batch["data"] = jnp.array(X)
+            batch["label"] = jnp.array(y, dtype=jnp.int32).reshape(-1)
+
+            rng_dropout, _ = jax.random.split(rng_dropout)
+            train_state = train_step(train_state, batch, {"dropout": rng_dropout})
+            train_state = compute_metrics(state=train_state, batch=batch)
+
+            for metric,value in train_state.metrics.compute().items(): # compute metrics
+                metrics_history[f'train_{metric}'].append(value) # record metrics
+
+
+        
+        print(f"loss: {metrics_history['train_loss'][-1]}, accuracy: {metrics_history['train_accuracy'][-1] * 100}")
+        train_state = train_state.replace(metrics=train_state.metrics.empty())
+
+
+        exit()
 
 

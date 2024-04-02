@@ -3,9 +3,7 @@ import flax.linen as nn
 import numpy as np
 import jax.numpy as jnp
 
-def sinusoidal_encoding(x):
-    length = x.shape[-2]
-    channels = x.shape[-1]
+def sinusoidal_encoding(length, channels):
     position = np.arange(length)[:, np.newaxis]
     div_term = np.exp(np.arange(0, channels, 2) * -(np.log(10000.0) / channels))
     pos_enc = np.zeros((length, channels))
@@ -40,6 +38,7 @@ class TransformerEncoderLayer(nn.Module):
 
         return x
 
+"""
 class TransformerEncoderLayerwithRoPE(nn.Module):
     d_model: int = 512
     nhead: int = 4
@@ -48,6 +47,7 @@ class TransformerEncoderLayerwithRoPE(nn.Module):
 
     @nn.compact
     def __call__(self, x, training: bool):
+
         x = nn.MultiHeadAttention(num_heads=self.nhead, qkv_features=self.d_model)(x)
         x = x + nn.Dropout(self.dropout_rate, deterministic=not training)(x)
         x = nn.LayerNorm()(x)
@@ -62,6 +62,7 @@ class TransformerEncoderLayerwithRoPE(nn.Module):
         x = nn.LayerNorm()(x)
 
         return x
+"""
 
 
 class TransformerEncoder(nn.Module):
@@ -87,17 +88,23 @@ class TransformerEncoderwithSinPE(nn.Module):
     nhead: int = 4
     dim_feedfoward: int = 2048
     dropout_rate: float = 0.5
+    class_token = jax.random.normal(jax.random.PRNGKey(0), (1, 1, d_model))
 
     @nn.compact
     def __call__(self, x, training=True):
-        x = nn.Dense(self.d_model)(x)
-        x = x + sinusoidal_encoding(x)
+
+        x = x + sinusoidal_encoding(x.shape[-2], x.shape[-1])
+
+        class_tokens = jnp.tile(self.class_token, (1, 1, self.d_model))
+
+        x = jnp.concatenate([class_tokens, x], axis=1)
 
         for _ in range(self.num_layer):
             x = TransformerEncoderLayer(d_model=self.d_model, nhead=self.nhead, dim_feedfoward=self.dim_feedfoward, dropout_rate=self.dropout_rate)(x, training=training)
 
         return x
 
+"""
 class TransformerEncoderwithRoPE(nn.Module):
     num_layer: int = 4
     d_model: int = 512
@@ -113,6 +120,7 @@ class TransformerEncoderwithRoPE(nn.Module):
             x = TransformerEncoderLayerwithRoPE(d_model=self.d_model, nhead=self.nhead, dim_feedfoward=self.dim_feedfoward, dropout_rate=self.dropout_rate)(x, training=training)
 
         return x
+"""
 
 class T4HSC(nn.Module):
     num_classes: int = 2
@@ -124,11 +132,23 @@ class T4HSC(nn.Module):
     dim_feedfoward: int = 2048
     dropout_rate: float = 0.5
 
+    #class_token_embedding = jax.random.normal(jax.random.PRNGKey(0), (1, 1, d_model))
+
     @nn.compact
     def __call__(self, x, training: bool):
+        x = nn.Dense(self.d_model)(x)
+
+        x = x + sinusoidal_encoding(x.shape[-2], x.shape[-1])
+
+        class_token_embedding = self.param('class_token', nn.initializers.normal(), (1, 1, self.d_model))
+
+        class_token = jnp.tile(class_token_embedding, (x.shape[0], 1, 1))
+        x = jnp.concatenate([class_token, x], axis=1)
+
 
         x = TransformerEncoder(num_layer=self.num_layer, d_model=self.d_model, nhead=self.nhead, dim_feedfoward=self.dim_feedfoward, dropout_rate=self.dropout_rate)(x, training)
 
+        x = x[:, 0, :]
         x = nn.Dropout(self.dropout_rate, deterministic=not training)(x)
         x = nn.Dense(self.hidden_dim)(x)
         x = nn.relu(x)
@@ -144,8 +164,10 @@ if __name__ == "__main__":
     #m = TransformerEncoder()
     x = jnp.ones((16, 10, 404))
     params = m.init({"params": jax.random.key(0), "dropout": jax.random.key(1)}, x, training=True)
+    print(*params)
 
     y = m.apply(params, x, training=False, rngs={'dropout': jax.random.key(0)})
     print(y.shape)
-    print(m.tabulate({'params': jax.random.key(0), 'dropout': jax.random.key(1)}, jnp.ones((1, 100, 404)), False, compute_flops=True, compute_vjp_flops=False))
+    #print(m.tabulate({'params': jax.random.key(0), 'dropout': jax.random.key(1)}, jnp.ones((1, 100, 404)), False, compute_flops=True, compute_vjp_flops=False))
+    print(jax.tree_util.tree_map(jnp.shape, params))
 
