@@ -1,6 +1,8 @@
 import jax
+import time
 import optax
 import model
+import logging
 import numpy as np
 from clu import metrics
 from flax.training import train_state
@@ -68,6 +70,21 @@ def compute_metrics(state, batch):
 
 def train(args):
 
+    file_handler = logging.FileHandler(f"./log/log_{args.tf}.txt")
+    console_handler = logging.StreamHandler()
+
+    file_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
+
+    file_handler.setFormatter(logging.Formatter("%(levelname)s %(asctime)s: %(message)s"))
+    console_handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(asctime)s: %(message)s"))
+
+    logger = logging.getLogger(f"log_{args.tf}")
+    logger.setLevel(logging.DEBUG)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
     #test_ds = hsdataset.HeartSoundDataset("./datasets/HS-PCCC2016/data", "./datasets/HS-PCCC2016/test/test.csv")
 
 
@@ -111,24 +128,17 @@ def train(args):
             batch = {}
             batch["data"] = jnp.array(train_dataset[i * args.batch_size : i * args.batch_size + args.batch_size])
             batch["label"] = jnp.array(train_dataset_label[i * args.batch_size : i * args.batch_size + args.batch_size].reshape(-1))
-            print(batch["data"].shape)
-            print(batch["label"].shape)
-            print(batch["data"].dtype)
-            print(batch["label"].dtype)
+            if (i + 1) % 10 == 0:
+                logger.info(f"Batch {i + 1}/{len}")
 
             rng_dropout, _ = jax.random.split(rng_dropout)
             train_state = train_step(train_state, batch, {"dropout": rng_dropout})
             train_state = compute_metrics(state=train_state, batch=batch)
 
-            for metric,value in train_state.metrics.compute().items(): # compute metrics
-                metrics_history[f'train_{metric}'].append(value) # record metrics
-
+        for metric,value in train_state.metrics.compute().items(): # compute metrics
+            metrics_history[f'train_{metric}'].append(value) # record metrics
 
         
         print(f"loss: {metrics_history['train_loss'][-1]}, accuracy: {metrics_history['train_accuracy'][-1] * 100}")
         train_state = train_state.replace(metrics=train_state.metrics.empty())
-
-
-        exit()
-
 

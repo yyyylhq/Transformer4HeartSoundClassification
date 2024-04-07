@@ -126,7 +126,7 @@ class T4HSC(nn.Module):
     num_classes: int = 2
     hidden_dim: int = 2048
 
-    num_layer: int = 4
+    num_layer: int = 6
     d_model: int = 512
     nhead: int = 4
     dim_feedfoward: int = 2048
