@@ -1,8 +1,8 @@
 import jax
 import time
 import optax
-import model
 import logging
+from models import model
 import numpy as np
 from clu import metrics
 from flax.training import train_state
@@ -19,10 +19,10 @@ class HeartSoundClassificationMetrics(metrics.Collection):
 class HeartSoundClassificationTrainState(train_state.TrainState):
     metrics: HeartSoundClassificationMetrics
 
-def create_train_state(m, rng, learning_rate, momentum):
+def create_train_state(m, rng, learning_rate):
     params = m.init(rng, jnp.empty([1, 100, 404]), True)["params"]
 
-    tx = optax.sgd(learning_rate, momentum)
+    tx = optax.adam(learning_rate)
 
     return HeartSoundClassificationTrainState.create(
         apply_fn=m.apply,
@@ -95,7 +95,7 @@ def train(args):
 
     rng = {"params": rng_params, "dropout": rng_dropout}
 
-    train_state = create_train_state(m=m, rng=rng, learning_rate=args.learning_rate, momentum=args.momentum)
+    train_state = create_train_state(m=m, rng=rng, learning_rate=args.learning_rate)
 
     metrics_history = {
         "train_loss": [],
@@ -119,17 +119,19 @@ def train(args):
     train_dataset_label = np.load(f"../datasets/PCCD/ten_folds/train/k0/train_label.npy")
 
 
+    train_start_time = time.time()
     for e in range(args.epochs):
-        print(f"Epoch {e} start...")
+        e_start_time = time.time()
+        logger.info("--------------------")
+        logger.info(f"Epoch {e} start...")
 
         len = train_dataset.shape[0] // args.batch_size
-        print(len)
         for i in range(len):
             batch = {}
             batch["data"] = jnp.array(train_dataset[i * args.batch_size : i * args.batch_size + args.batch_size])
             batch["label"] = jnp.array(train_dataset_label[i * args.batch_size : i * args.batch_size + args.batch_size].reshape(-1))
             if (i + 1) % 10 == 0:
-                logger.info(f"Batch {i + 1}/{len}")
+                logger.debug(f"Batch {i + 1}/{len} finished.")
 
             rng_dropout, _ = jax.random.split(rng_dropout)
             train_state = train_step(train_state, batch, {"dropout": rng_dropout})
@@ -139,6 +141,7 @@ def train(args):
             metrics_history[f'train_{metric}'].append(value) # record metrics
 
         
-        print(f"loss: {metrics_history['train_loss'][-1]}, accuracy: {metrics_history['train_accuracy'][-1] * 100}")
+        logger.info(f"loss: {(metrics_history['train_loss'][-1]):>6f}, accuracy: {(metrics_history['train_accuracy'][-1] * 100):>6f}")
+        logger.info(f"Epoch {e} end, time: {(time.time() - e_start_time):.2f}s.")
         train_state = train_state.replace(metrics=train_state.metrics.empty())
 

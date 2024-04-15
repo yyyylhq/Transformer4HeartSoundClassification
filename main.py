@@ -1,4 +1,3 @@
-import logging
 import argparse
 from train import train
 
@@ -23,15 +22,14 @@ if __name__ == "__main__":
     parser_train = subparsers.add_parser("train")
     parser_test = subparsers.add_parser("test")
 
-    parser_train.add_argument("--train_dataset", type=str, default="./label/PCCD/0/train.csv")
-    parser_train.add_argument("--val_dataset", type=str, default="./label/PCCD/0/val.csv")
-    parser_train.add_argument("--test_dataset", type=str, default="./label/PCCD/0/val.csv")
+    parser_train.add_argument("--train_dataset", type=str, default="../datasets/PCCD/ten_folds/train/k0/train.csv")
+    parser_train.add_argument("--val_dataset", type=str, default="../datasets/PCCD/ten_folds/test/k0/test.csv.csv")
+    parser_train.add_argument("--test_dataset", type=str, default="../datasets/PCCD/ten_folds/test/k0/test.csv")
     parser_train.add_argument("--tf", type=str, default="k0")
 
     parser_train.add_argument("--epochs", type=int, default=200)
     parser_train.add_argument("--batch_size", type=int, default=256)
     parser_train.add_argument("--learning_rate", type=float, default=0.0001)
-    parser_train.add_argument("--momentum", type=float, default=0.9)
 
     parser_train.add_argument("--params_rng", type=int, default=0)
     parser_train.add_argument("--dropout_rng", type=int, default=1)
