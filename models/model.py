@@ -114,7 +114,12 @@ class TransformerEncoderLayerwithRoPE(nn.Module):
         q = apply_rotary_encoding(q, jnp.arange(x.shape[1])[jnp.newaxis, :])
         k = apply_rotary_encoding(k, jnp.arange(x.shape[1])[jnp.newaxis, :])
 
-        x = nn.dot_product_attention(q, k, v, dropout_rng=self.make_rng("dropout"), dropout_rate=self.dropout_rate, deterministic=not training).reshape(b, l, d)
+
+        if training:
+            x = nn.dot_product_attention(q, k, v, dropout_rng=self.make_rng("dropout"), dropout_rate=self.dropout_rate, deterministic=not training).reshape(b, l, d)
+        else:
+            x = nn.dot_product_attention(q, k, v, deterministic=not training).reshape(b, l, d)
+
         x = nn.Dense(d)(x)
 
         x = x + nn.Dropout(self.dropout_rate, deterministic=not training)(x)
@@ -267,7 +272,7 @@ class T4HSCwithSinPE(nn.Module):
 
     @nn.compact
     def __call__(self, x, training: bool):
-        x = nn.Dense(self.d_model)(x)
+        x = nn.Dense(self.embed_dim)(x)
 
         class_token_embedding = self.param("class_token", nn.initializers.normal(), (1, 1, self.embed_dim))
 
@@ -357,12 +362,12 @@ class T4HSCwithRelativePE(nn.Module):
 
 if __name__ == "__main__":
 
-    m = T4HSCwithRelativePE()
+    m = T4HSCwithRoPE()
 
     x = jnp.ones((16, 10, 404))
     params = m.init({"params": jax.random.key(0), "dropout": jax.random.key(1)}, x, training=True)
 
-    y = m.apply(params, x, training=False, rngs={"dropout": jax.random.key(0)})
+    y = m.apply(params, x, training=True, rngs={"dropout": jax.random.key(0)})
     print(m.tabulate({"params": jax.random.key(0), "dropout": jax.random.key(1)}, jnp.ones((1, 100, 404)), True, compute_flops=True, compute_vjp_flops=False))
     print(jax.tree_util.tree_map(jnp.shape, params))
 

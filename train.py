@@ -2,14 +2,17 @@ import jax
 import time
 import optax
 import logging
-from models import model
 import numpy as np
+
 from clu import metrics
 from flax.training import train_state
 from flax import struct
 from jax import numpy as jnp
-#from hsdataset import HeartSoundDataset, HeartSoundDatasetVote
-#from torch.utils.data import DataLoader
+
+import get_dataset
+import dataloader
+from models import model
+
 
 @struct.dataclass
 class HeartSoundClassificationMetrics(metrics.Collection):
@@ -20,7 +23,7 @@ class HeartSoundClassificationTrainState(train_state.TrainState):
     metrics: HeartSoundClassificationMetrics
 
 def create_train_state(m, rng, learning_rate):
-    params = m.init(rng, jnp.empty([1, 100, 404]), True)["params"]
+    params = m.init(rng, jnp.empty([1, 100, 256]), True)["params"]
 
     tx = optax.adam(learning_rate)
 
@@ -32,15 +35,14 @@ def create_train_state(m, rng, learning_rate):
     )
 
 @jax.jit
-def train_step(state, batch, dropout_rng):
+def train_step(state, batch, rngs):
 
     def loss_fn(params):
-        logits = state.apply_fn({"params": params}, batch["data"], True, rngs=dropout_rng)
+        logits = state.apply_fn({"params": params}, batch["data"], True, rngs=rngs)
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits=logits,
             labels=batch["label"]
         ).mean()
-        print(loss)
 
         return loss
 
@@ -85,10 +87,8 @@ def train(args):
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    #test_ds = hsdataset.HeartSoundDataset("./datasets/HS-PCCC2016/data", "./datasets/HS-PCCC2016/test/test.csv")
 
-
-    m = model.T4HSC()
+    m = model.T4HSCwithRoPE(num_layer=6)
 
     rng_params = jax.random.key(args.params_rng)
     rng_dropout = jax.random.key(args.dropout_rng)
@@ -105,43 +105,69 @@ def train(args):
     }
 
 
-    """
-    train_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/train/{args.tf}/train.csv")
-    test_dataset = HeartSoundDataset("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
-    test_vote_dataset = HeartSoundDatasetVote("../datasets/PCCD/data/wav", f"../datasets/PCCD/ten_folds/test/{args.tf}/test.csv")
+    train_dataset = get_dataset.get_dataset("../datasets/PCCD/data/npy", "../datasets/PCCD/ten_folds/train/k0/train.csv")
+    test_dataset = get_dataset.get_dataset("../datasets/PCCD/data/npy", "../datasets/PCCD/ten_folds/test/k0/test.csv")
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
-    train_dataset = np.load(f"../datasets/PCCD/ten_folds/train/k{args.tf}/train_data.npy")
-    train_dataset_label = np.load(f"../datasets/PCCD/ten_folds/train/k{args.tf}/train_label.npy")
-    """
-    train_dataset = np.load(f"../datasets/PCCD/ten_folds/train/k0/train_data.npy")
-    train_dataset_label = np.load(f"../datasets/PCCD/ten_folds/train/k0/train_label.npy")
 
+    train_dataset_loader = dataloader.JAXDataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
+    test_dataset_loader = dataloader.JAXDataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
 
     train_start_time = time.time()
     for e in range(args.epochs):
         e_start_time = time.time()
         logger.info("--------------------")
-        logger.info(f"Epoch {e} start...")
+        logger.info(f"Epoch {e + 1}/{args.epochs} start...")
 
-        len = train_dataset.shape[0] // args.batch_size
-        for i in range(len):
-            batch = {}
-            batch["data"] = jnp.array(train_dataset[i * args.batch_size : i * args.batch_size + args.batch_size])
-            batch["label"] = jnp.array(train_dataset_label[i * args.batch_size : i * args.batch_size + args.batch_size].reshape(-1))
-            if (i + 1) % 10 == 0:
-                logger.debug(f"Batch {i + 1}/{len} finished.")
+        i = 0
+        for b in train_dataset_loader:
+            batch = {
+                "data": b[0],
+                "label": b[1]
+            }
 
             rng_dropout, _ = jax.random.split(rng_dropout)
-            train_state = train_step(train_state, batch, {"dropout": rng_dropout})
+            train_state = train_step(train_state, batch, rngs={"dropout": rng_dropout})
             train_state = compute_metrics(state=train_state, batch=batch)
+
+            if (i + 1) % 10 == 0:
+                logger.debug(f"Batch {i + 1}/{len(train_dataset_loader)} finished.")
+
+            #logger.debug(f"Batch {i + 1}/{len(train_dataset_loader)} finished.")
+
+            i += 1
+
 
         for metric,value in train_state.metrics.compute().items(): # compute metrics
             metrics_history[f'train_{metric}'].append(value) # record metrics
 
-        
-        logger.info(f"loss: {(metrics_history['train_loss'][-1]):>6f}, accuracy: {(metrics_history['train_accuracy'][-1] * 100):>6f}")
-        logger.info(f"Epoch {e} end, time: {(time.time() - e_start_time):.2f}s.")
+        test_metrics = HeartSoundClassificationMetrics.empty()
+        for b in test_dataset_loader:
+            batch = {
+                "data": b[0],
+                "label": b[1]
+            }
+
+            logits = train_state.apply_fn({"params": train_state.params}, batch["data"], False)
+            loss = optax.softmax_cross_entropy_with_integer_labels(
+                logits=logits,
+                labels=batch["label"]
+            ).mean()
+
+            metric_updates = test_metrics.single_from_model_output(
+                logits=logits,
+                labels=batch["label"],
+                loss=loss
+            )
+            test_metrics = test_metrics.merge(metric_updates)
+
+
+        for metric,value in test_metrics.compute().items():
+            metrics_history[f'test_{metric}'].append(value)
+
+        logger.info(f"Loss: {(metrics_history['train_loss'][-1]):>6f}, accuracy: {(metrics_history['train_accuracy'][-1] * 100):>6f}.")
+        logger.info(f"Loss: {(metrics_history['test_loss'][-1]):>6f}, accuracy: {(metrics_history['test_accuracy'][-1] * 100):>6f}.")
+        logger.info(f"Epoch {e + 1} end, time: {(time.time() - e_start_time):.2f}s.")
+
         train_state = train_state.replace(metrics=train_state.metrics.empty())
 
+    logger.info(f"Train end, time: {(time.time() - train_start_time):.2f}s.")

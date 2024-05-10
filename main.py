@@ -1,7 +1,45 @@
+import jax
 import argparse
-from train import train
+#from absl import app, flags, logging
+#from clu import platform, metric_writers
+#from ml_collections import config_flags
+
+import train
+
+"""
+FLAGS = flags.FLAGS
+
+config_flags.DEFINE_config_file(
+    "config",
+    None,
+    "File path to the training hyperparameter configuration.",
+    lock_config=True,
+)
+
+def main(argv):
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
+
+    #logging.info(f"JAX process: {jax.process_index()} / {jax.process_count()}")
+    #logging.info(f"JAX local devices: {jax.local_devices()}")
+    logging.set_verbosity(logging.INFO)
+    logdir = "./log"
+    writer = metric_writers.create_default_writer(logdir)
+    for step in range(10):
+        writer.write_scalars(step, dict(loss=0.9**step))
+
+    #train.train_and_eval(FLAGS.config)
+
+
+
+"""
 
 if __name__ == "__main__":
+    """
+    flags.mark_flag_as_required("config")
+
+    app.run(main)
+    """
 
     tf = "k0"
 
@@ -38,7 +76,7 @@ if __name__ == "__main__":
     print(args)
 
     if args.mode == "train":
-        train(args)
+        train.train(args)
     elif args.mode == "test":
         pass
     else:
